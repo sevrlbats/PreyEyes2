@@ -14,6 +14,7 @@ It adds an SMTV-style targeting reticle, an enemy affinity board, Cathedral of S
 - Persistent knowledge system learned through attacks, kills, Analyze/Spyglass, recruitment, and fusion.
 - Buff/debuff icon overlay.
 - FPS-unlock friendly board visibility behavior as of `2.5.0`.
+- Self-contained buff/debuff icon assets as of `2.5.1`.
 
 ## Requirements
 
@@ -57,6 +58,12 @@ Copy the included icon assets into the same game install:
 
 ```powershell
 Copy-Item ".\Mods\icons" "C:\Program Files (x86)\Steam\steamapps\common\smt3hd\Mods\icons" -Recurse -Force
+```
+
+The buff/debuff overlay expects the kajakunda icon assets at:
+
+```text
+Mods\icons\kajakunda\
 ```
 
 Do not run this full build at the same time as the Reticles Only alternative. They use the same MelonLoader mod name and installed DLL path:

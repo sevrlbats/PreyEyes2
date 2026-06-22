@@ -67,10 +67,20 @@ namespace PreyEyes2
         internal static void Init(MelonLogger.Instance log, string modsDir)
         {
             _log = log;
-            _assetDir = System.IO.Path.Combine(
+            string packagedAssetDir = System.IO.Path.Combine(
+                modsDir,
+                "icons",
+                "kajakunda");
+            string legacyAssetDir = System.IO.Path.Combine(
                 System.IO.Path.GetDirectoryName(modsDir) ?? ".",
                 "ui models",
                 "kajakunda");
+
+            _assetDir = System.IO.Directory.Exists(packagedAssetDir) ||
+                !System.IO.Directory.Exists(legacyAssetDir)
+                    ? packagedAssetDir
+                    : legacyAssetDir;
+
             PreyEyes2Trace.Log("buff", $"asset dir={_assetDir}");
         }
 

@@ -6,7 +6,7 @@ using Il2Cpp;
 using MelonLoader;
 using MelonLoader.NativeUtils;
 
-[assembly: MelonInfo(typeof(PreyEyes2.PreyEyes2Mod), "PreyEyes2", "2.5.0", "local")]
+[assembly: MelonInfo(typeof(PreyEyes2.PreyEyes2Mod), "PreyEyes2", "2.5.1", "local")]
 [assembly: MelonGame(null, "smt3hd")]
 
 namespace PreyEyes2
@@ -111,7 +111,7 @@ namespace PreyEyes2
                 // Register with AnyMenu (if present)
                 RegisterAnyMenu();
 
-                LoggerInstance.Msg("PreyEyes2 v2.5.0 initialized.");
+                LoggerInstance.Msg("PreyEyes2 v2.5.1 initialized.");
             }
             catch (Exception ex)
             {
