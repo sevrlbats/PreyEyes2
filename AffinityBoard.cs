@@ -18,6 +18,7 @@ namespace PreyEyes2
     {
         private static MelonLogger.Instance? _log;
         private static string _modsDir = "";
+        private static bool _diagnosticMode = false;
         private static bool _useSmt3Style = true;
 
         // ── Canvas ──
@@ -91,7 +92,6 @@ namespace PreyEyes2
         // SMTV style layout (legacy)
         private const float SMTV_BANNER_HEIGHT = 32f;
         private const float SMTV_BANNER_ASPECT = 1297f / 114f;
-        private static readonly float SMTV_ROW_WIDTH = SMTV_BANNER_HEIGHT * SMTV_BANNER_ASPECT;
         private const float SMTV_TILE_SIZE = 29f;
         private const float SMTV_BANNER_Y = 385f;
         private const float SMTV_TILE_Y = 353f;
@@ -119,10 +119,11 @@ namespace PreyEyes2
         //  INIT
         // ═══════════════════════════════════════════════════
 
-        internal static void Init(MelonLogger.Instance log, string modsDir)
+        internal static void Init(MelonLogger.Instance log, string modsDir, bool diagnosticMode = false)
         {
             _log = log;
             _modsDir = modsDir;
+            _diagnosticMode = diagnosticMode;
             // Check Hyperconfig for UI style, fallback to file-based toggle
             try
             {
@@ -766,8 +767,11 @@ namespace PreyEyes2
             if (slot < 0 || slot >= MAX_SLOTS || !_boards[slot].created) return;
             ref var b = ref _boards[slot];
 
-            ReflectionCache.SetRect(b.backdropGO, SMT3_BACKDROP_WIDTH, SMT3_BACKDROP_HEIGHT,
-                0.5f, 0.5f, 0.5f, 0.5f, centerX, centerY);
+            if (b.backdropGO != null)
+            {
+                ReflectionCache.SetRect(b.backdropGO, SMT3_BACKDROP_WIDTH, SMT3_BACKDROP_HEIGHT,
+                    0.5f, 0.5f, 0.5f, 0.5f, centerX, centerY);
+            }
 
             float spacing = SMT3_BOARD_WIDTH / NUM_ELEMENTS; // 196/7 = 28px per slot
             float startX = centerX - SMT3_BOARD_WIDTH / 2f + spacing / 2f;
@@ -794,7 +798,6 @@ namespace PreyEyes2
         private const float CATHEDRAL_BOARD_Y = 170f;
         private const int CATHEDRAL_SLOT = 1;
         private static int _lastCathedralDemonId = -1;
-        private static int _cathedralStaleFrames = 0;
 
         /// <summary>Show the affinity board for a demon in the Cathedral (fusion/compendium).</summary>
         internal static void OnCathedralTarget(IntPtr unitWork)
@@ -814,10 +817,10 @@ namespace PreyEyes2
             // Query all 7 affinities directly (always fully known in Cathedral)
             int spriteCount = 0;
             for (int i = 0; i < _resultSprites.Length; i++) if (_resultSprites[i] != null) spriteCount++;
-            if (_posLogCount < 3) { _posLogCount++; _log?.Msg($"PE2 CATHEDRAL: demonId={demonId} sprites={spriteCount}/7 board={_boards[CATHEDRAL_SLOT].created}"); }
+            if (_diagnosticMode && _posLogCount < 3) { _posLogCount++; _log?.Msg($"PE2 CATHEDRAL: demonId={demonId} sprites={spriteCount}/7 board={_boards[CATHEDRAL_SLOT].created}"); }
 
             // Log raw aisyo per unique demon (once per ID)
-            if (demonId != _lastCathedralDemonId)
+            if (_diagnosticMode && demonId != _lastCathedralDemonId)
             {
                 _lastCathedralDemonId = demonId;
                 // Log attrs 0-9 to find Light/Dark
@@ -858,7 +861,6 @@ namespace PreyEyes2
         {
             HideBoard(CATHEDRAL_SLOT);
             _lastCathedralDemonId = -1;
-            _cathedralStaleFrames = 0;
         }
 
         /// <summary>Reset board state between battles.</summary>

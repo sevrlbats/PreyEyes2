@@ -6,7 +6,7 @@ using Il2Cpp;
 using MelonLoader;
 using MelonLoader.NativeUtils;
 
-[assembly: MelonInfo(typeof(PreyEyes2.PreyEyes2Mod), "PreyEyes2", "2.5.1", "local")]
+[assembly: MelonInfo(typeof(PreyEyes2.PreyEyes2Mod), "PreyEyes2", "2.5.5", "local")]
 [assembly: MelonGame(null, "smt3hd")]
 
 namespace PreyEyes2
@@ -47,7 +47,9 @@ namespace PreyEyes2
         // ── Frame tracking ──
         private const int MAX_SLOTS = 12;
         private static readonly bool[] _boardDrawnThisFrame = new bool[MAX_SLOTS];
+        private static readonly bool[] _liveBoardDrawnThisFrame = new bool[MAX_SLOTS];
         private static int _targetsThisFrame = 0; // count targets per frame for AoE detection
+        private static int _liveTargetsThisFrame = 0; // distinct live enemy targets only; stale KO draws do not hide the board
         private static bool _wasInBattle = false;
         private static int _frameCount = 0;
         private static int _errorCount = 0;
@@ -58,7 +60,6 @@ namespace PreyEyes2
         private static int _lastResolutionTraceStartFrame = -1;
         private const int TargetDrawGraceFrames = 8;
         private static int _lastTargetDrawFrame = -9999;
-        private static bool _lastAllowBuffStageReads = false;
         private static bool _lastResolutionActive = false;
         private static bool _lastDeathFreezeActive = false;
         private static int _lastCursorTraceCuridx = -1;
@@ -83,6 +84,7 @@ namespace PreyEyes2
 
         // ── Mod folder path ──
         private static string _modsDir = "";
+        private static bool _diagnosticMode = false;
 
         public override void OnInitializeMelon()
         {
@@ -91,19 +93,21 @@ namespace PreyEyes2
                 // Resolve Mods directory
                 _modsDir = GetModsDir();
 
+                bool diagMode = File.Exists(Path.Combine(_modsDir, "PreyEyes2_diag"));
+                bool traceMode = diagMode || File.Exists(Path.Combine(_modsDir, "PreyEyes2_trace"));
+                _diagnosticMode = diagMode;
+
                 // Initialize subsystems
                 ReflectionCache.Init(LoggerInstance);
-                PreyEyes2Trace.Init(LoggerInstance);
+                PreyEyes2Trace.Init(LoggerInstance, traceMode);
 
                 bool useLuminance = File.Exists(Path.Combine(_modsDir, "PreyEyes2_luminance"));
-                ReticleColorizer.Init(LoggerInstance, useLuminance, _modsDir);
-
-                bool diagMode = File.Exists(Path.Combine(_modsDir, "PreyEyes2_diag"));
+                ReticleColorizer.Init(LoggerInstance, useLuminance, _modsDir, traceMode);
                 AffinityResolver.Init(LoggerInstance, diagMode);
 
-                AffinityBoard.Init(LoggerInstance, _modsDir);
+                AffinityBoard.Init(LoggerInstance, _modsDir, traceMode);
                 KnowledgeStore.Init(LoggerInstance, _modsDir);
-                BuffDisplay.Init(LoggerInstance, _modsDir);
+                BuffDisplay.Init(LoggerInstance);
 
                 // Register hooks
                 RegisterHooks();
@@ -111,7 +115,7 @@ namespace PreyEyes2
                 // Register with AnyMenu (if present)
                 RegisterAnyMenu();
 
-                LoggerInstance.Msg("PreyEyes2 v2.5.1 initialized.");
+                LoggerInstance.Msg("PreyEyes2 v2.5.5 initialized.");
             }
             catch (Exception ex)
             {
@@ -242,16 +246,6 @@ namespace PreyEyes2
             // 2. Validate curidx range
             if (curidx < 0 || curidx >= MAX_SLOTS) return;
 
-            if (IsDeathFreezeActive())
-            {
-                PreyEyes2Trace.LogLimited(
-                    $"cursor-death-freeze:{curidx}",
-                    8,
-                    "cursor",
-                    $"skipping Prey Eyes draw work during death freeze curidx={curidx} frame={_frameCount}");
-                return;
-            }
-
             // 3. Mark this curidx as drawn this frame (only for enemies)
             if (curidx >= 4)
             {
@@ -270,6 +264,13 @@ namespace PreyEyes2
                     : AffinityResolver.ResolveForReticle(curidx);
                 ReticleColorizer.ApplyToReticle(curidx, result);
                 int demonId = ReflectionCache.GetDemonId(curidx);
+                bool liveEnemyTarget = curidx >= 4 && IsLiveEnemyTarget(curidx, demonId);
+                if (liveEnemyTarget && !_liveBoardDrawnThisFrame[curidx])
+                {
+                    _liveBoardDrawnThisFrame[curidx] = true;
+                    _liveTargetsThisFrame++;
+                }
+
                 if (curidx >= 4 &&
                     (_lastCursorTraceCuridx != curidx ||
                      _lastCursorTraceTargetCount != _targetsThisFrame ||
@@ -282,13 +283,10 @@ namespace PreyEyes2
                 }
 
                 // 5. Update affinity board (enemies only)
-                if (curidx >= 4)
-                    BuffDisplay.OnTargetDrawn(curidx, _targetsThisFrame);
-
-                if (curidx >= 4 && BoardEnabled)
+                if (liveEnemyTarget && BoardEnabled)
                 {
                     var reticleGO = ReflectionCache.GetTargetMark2D(curidx);
-                    AffinityBoard.OnTargetDrawn(curidx, _targetsThisFrame, reticleGO);
+                    AffinityBoard.OnTargetDrawn(curidx, _liveTargetsThisFrame, reticleGO);
                 }
             }
             catch (Exception ex)
@@ -317,8 +315,8 @@ namespace PreyEyes2
                     if (ReflectionCache.N_GetUnitID != null)
                         demonId = ReflectionCache.N_GetUnitID(result, ReflectionCache.Mip_GetUnitID);
 
-                    // Log attrs 8-15 for first 10 unique demons (ailment discovery)
-                    if (demonId > 0 && demonId != _lastCathedralDemonId && _cathedralStaleCount < 30
+                    // Optional raw affinity scan for element-order investigation.
+                    if (_diagnosticMode && demonId > 0 && demonId != _lastCathedralDemonId && _cathedralStaleCount < 30
                         && ReflectionCache.N_DatGetAisyo != null)
                     {
                         _cathedralStaleCount++;
@@ -415,7 +413,6 @@ namespace PreyEyes2
                             PreyEyes2Trace.Log("update", $"tarStat changed {_prevTarStat}->{tarStat} frame={_frameCount}");
                         if (tarStat == 0)
                         {
-                            BuffDisplay.OnNoTargets();
                             AffinityBoard.OnNoTargets();
                         }
 
@@ -443,32 +440,15 @@ namespace PreyEyes2
                 bool resolutionActive = _resolutionTraceFrames > 0;
                 TraceCombatWindow(inBattle, tarStat, commandMenuActive, resolutionActive);
                 bool deathFreezeActive = IsDeathFreezeActive();
-                bool allowBuffStageReads = inBattle && commandMenuActive && !resolutionActive && !deathFreezeActive;
-                if (_lastAllowBuffStageReads != allowBuffStageReads || _lastResolutionActive != resolutionActive || _lastDeathFreezeActive != deathFreezeActive)
-                    PreyEyes2Trace.Log("update", $"buff overlay state allowReads={allowBuffStageReads} resolution={resolutionActive} deathFreeze={deathFreezeActive} tarStat={tarStat} commandMenu={commandMenuActive} frame={_frameCount}");
-                _lastAllowBuffStageReads = allowBuffStageReads;
+                if (_lastResolutionActive != resolutionActive || _lastDeathFreezeActive != deathFreezeActive)
+                    PreyEyes2Trace.Log("update", $"combat guard state resolution={resolutionActive} deathFreeze={deathFreezeActive} tarStat={tarStat} commandMenu={commandMenuActive} frame={_frameCount}");
                 _lastResolutionActive = resolutionActive;
                 _lastDeathFreezeActive = deathFreezeActive;
-                BuffDisplay.OnUpdate(inBattle, allowBuffStageReads, resolutionActive || deathFreezeActive);
+                BuffDisplay.OnUpdate(inBattle);
 
                 if (inBattle)
                 {
                     _wasInBattle = true;
-
-                    if (deathFreezeActive)
-                    {
-                        BuffDisplay.OnNoTargets();
-                        AffinityBoard.OnNoTargets();
-                        ReticleColorizer.ClearAll();
-                        TraceResolutionWindow(inBattle, tarStat, commandMenuActive);
-                        KnowledgeStore.Tick();
-                        Array.Clear(_boardDrawnThisFrame, 0, MAX_SLOTS);
-                        Array.Clear(_boardDrawnLastFrame, 0, MAX_SLOTS);
-                        _lastTargetDrawFrame = -9999;
-                        _targetsThisFrame = 0;
-                        _prevTarStat = tarStat;
-                        return;
-                    }
 
                     // Poll the command menu every frame — caches skill ID for the hook
                     AffinityResolver.PollSelectedSkill();
@@ -501,7 +481,6 @@ namespace PreyEyes2
                                 }
                             }
 
-                            BuffDisplay.OnNoTargets();
                             AffinityBoard.OnNoTargets();
                         }
                         _prevTarStat = tarStat;
@@ -514,10 +493,15 @@ namespace PreyEyes2
                     // ── Kill detection: check for newly dead enemies ──
                     try
                     {
-                        bool allowKillDetection = !resolutionActive && commandMenuActive;
+                        bool allowKillDetection = !resolutionActive && !deathFreezeActive && commandMenuActive;
                         if (!allowKillDetection)
                         {
-                            if (resolutionActive)
+                            if (deathFreezeActive)
+                            {
+                                if (ShouldTraceResolutionFrame(_resolutionTraceFrames))
+                                    PreyEyes2Trace.Log("update", $"skipping kill detection frame={_frameCount} because death freeze is active");
+                            }
+                            else if (resolutionActive)
                             {
                                 if (ShouldTraceResolutionFrame(_resolutionTraceFrames))
                                     PreyEyes2Trace.Log("update", $"skipping kill detection frame={_frameCount} because resolution window is active");
@@ -569,7 +553,7 @@ namespace PreyEyes2
 
                     // FPS unlockers can run extra update ticks between target-cursor draws.
                     // Keep the board stable through short draw-hook gaps, but still hide
-                    // immediately for real target-end states handled above (tarStat == 0, death freeze).
+                    // immediately for real target-end states handled above (tarStat == 0).
                     if (_targetsThisFrame == 0)
                     {
                         bool targetDrawRecently = (_frameCount - _lastTargetDrawFrame) <= TargetDrawGraceFrames;
@@ -577,7 +561,6 @@ namespace PreyEyes2
                         {
                             if (CountActiveTargets(_boardDrawnLastFrame) > 0)
                                 BeginResolutionTrace("targets-disappeared", tarStat, commandMenuActive);
-                            BuffDisplay.OnNoTargets();
                             AffinityBoard.OnNoTargets();
                         }
                     }
@@ -592,7 +575,9 @@ namespace PreyEyes2
                     if (_targetsThisFrame > 0 || (_frameCount - _lastTargetDrawFrame) > TargetDrawGraceFrames)
                         Array.Copy(_boardDrawnThisFrame, _boardDrawnLastFrame, MAX_SLOTS);
                     Array.Clear(_boardDrawnThisFrame, 0, MAX_SLOTS);
+                    Array.Clear(_liveBoardDrawnThisFrame, 0, MAX_SLOTS);
                     _targetsThisFrame = 0;
+                    _liveTargetsThisFrame = 0;
                 }
                 else if (_wasInBattle)
                 {
@@ -603,13 +588,14 @@ namespace PreyEyes2
                     AffinityBoard.ResetForNewBattle();
                     KnowledgeStore.ForceSave();
                     Array.Clear(_boardDrawnThisFrame, 0, MAX_SLOTS);
+                    Array.Clear(_liveBoardDrawnThisFrame, 0, MAX_SLOTS);
                     Array.Clear(_boardDrawnLastFrame, 0, MAX_SLOTS);
                     _lastTargetDrawFrame = -9999;
                     _targetsThisFrame = 0;
+                    _liveTargetsThisFrame = 0;
                     _prevTarStat = 0;
                     _lastCommandMenuActive = false;
                     _resolutionTraceFrames = 0;
-                    _lastAllowBuffStageReads = false;
                     _lastResolutionActive = false;
                     _lastDeathFreezeActive = false;
                     _lastCursorTraceCuridx = -1;
@@ -719,6 +705,23 @@ namespace PreyEyes2
             }
         }
 
+        private static bool IsLiveEnemyTarget(int curidx, int demonId)
+        {
+            if (curidx < 4 || demonId <= 0)
+                return false;
+
+            if (ReflectionCache.TryGetUnitVitals(curidx, out int vitalsDemonId, out int hp, out _))
+            {
+                if (vitalsDemonId <= 0)
+                    return false;
+
+                if (hp == 0)
+                    return false;
+            }
+
+            return true;
+        }
+
         private static void BeginResolutionTrace(string reason, int tarStat, bool commandMenuActive)
         {
             if (_lastResolutionTraceStartFrame == _frameCount && _resolutionTraceFrames > 0)
@@ -732,7 +735,7 @@ namespace PreyEyes2
             int attr = AffinityResolver.GetSkillElement(skillId);
             PreyEyes2Trace.Log(
                 "update",
-                $"resolution-window start reason={reason} frame={_frameCount} tarStat={tarStat} skill={skillId} attr={attr} targetsLastFrame={CountActiveTargets(_boardDrawnLastFrame)} targetsThisFrame={_targetsThisFrame} buffState={BuffDisplay.DescribeTraceState()}");
+                $"resolution-window start reason={reason} frame={_frameCount} tarStat={tarStat} skill={skillId} attr={attr} targetsLastFrame={CountActiveTargets(_boardDrawnLastFrame)} targetsThisFrame={_targetsThisFrame}");
         }
 
         private static void TraceResolutionWindow(bool inBattle, int tarStat, bool commandMenuActive)
@@ -744,11 +747,11 @@ namespace PreyEyes2
             {
                 PreyEyes2Trace.Log(
                     "update",
-                    $"resolution-window frame={_frameCount} remaining={_resolutionTraceFrames} inBattle={inBattle} tarStat={tarStat} commandMenu={commandMenuActive} targetsThisFrame={_targetsThisFrame} targetsLastFrame={CountActiveTargets(_boardDrawnLastFrame)} buffState={BuffDisplay.DescribeTraceState()}");
+                    $"resolution-window frame={_frameCount} remaining={_resolutionTraceFrames} inBattle={inBattle} tarStat={tarStat} commandMenu={commandMenuActive} targetsThisFrame={_targetsThisFrame} targetsLastFrame={CountActiveTargets(_boardDrawnLastFrame)}");
             }
 
             if (_resolutionTraceFrames == 1)
-                PreyEyes2Trace.Log("update", $"resolution-window end frame={_frameCount} buffState={BuffDisplay.DescribeTraceState()}");
+                PreyEyes2Trace.Log("update", $"resolution-window end frame={_frameCount}");
             _resolutionTraceFrames--;
         }
 

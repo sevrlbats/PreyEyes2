@@ -28,7 +28,7 @@ namespace PreyEyes2
             _lastCombatSnapshot = snapshot;
             PreyEyes2Trace.Log(
                 "combat",
-                $"watch start reason={reason} frame={_frameCount} tarStat={tarStat} commandMenu={commandMenuActive} resolution={resolutionActive} iconHealth={BuffDisplay.DescribeIconHealth()} snapshot={snapshot}");
+                $"watch start reason={reason} frame={_frameCount} tarStat={tarStat} commandMenu={commandMenuActive} resolution={resolutionActive} snapshot={snapshot}");
         }
 
         private static void TraceCombatWindow(bool inBattle, int tarStat, bool commandMenuActive, bool resolutionActive)
@@ -59,7 +59,7 @@ namespace PreyEyes2
             {
                 PreyEyes2Trace.Log(
                     "combat",
-                    $"watch frame={_frameCount} remaining={_combatTraceFrames} tarStat={tarStat} commandMenu={commandMenuActive} resolution={resolutionActive} iconHealth={BuffDisplay.DescribeIconHealth()} snapshot={snapshot}");
+                    $"watch frame={_frameCount} remaining={_combatTraceFrames} tarStat={tarStat} commandMenu={commandMenuActive} resolution={resolutionActive} snapshot={snapshot}");
                 _lastCombatSnapshot = snapshot;
             }
 
@@ -67,7 +67,7 @@ namespace PreyEyes2
             {
                 PreyEyes2Trace.Log(
                     "combat",
-                    $"watch end frame={_frameCount} iconHealth={BuffDisplay.DescribeIconHealth()} snapshot={snapshot}");
+                    $"watch end frame={_frameCount} snapshot={snapshot}");
             }
 
             _combatTraceFrames--;
@@ -213,7 +213,7 @@ namespace PreyEyes2
 
             PreyEyes2Trace.Log(
                 "combat",
-                $"death-freeze start reason={reason} frame={_frameCount} tarStat={tarStat} commandMenu={commandMenuActive} resolution={resolutionActive} iconHealth={BuffDisplay.DescribeIconHealth()}");
+                $"death-freeze start reason={reason} frame={_frameCount} tarStat={tarStat} commandMenu={commandMenuActive} resolution={resolutionActive}");
         }
 
         private static void TraceDeathFreezeWindow(int tarStat, bool commandMenuActive, bool resolutionActive)
@@ -225,7 +225,7 @@ namespace PreyEyes2
             {
                 PreyEyes2Trace.Log(
                     "combat",
-                    $"death-freeze frame={_frameCount} remaining={_deathFreezeFrames} reason={_lastDeathFreezeReason} tarStat={tarStat} commandMenu={commandMenuActive} resolution={resolutionActive} iconHealth={BuffDisplay.DescribeIconHealth()}");
+                    $"death-freeze frame={_frameCount} remaining={_deathFreezeFrames} reason={_lastDeathFreezeReason} tarStat={tarStat} commandMenu={commandMenuActive} resolution={resolutionActive}");
             }
 
             if (_deathFreezeFrames == 1)

@@ -209,31 +209,34 @@ namespace PreyEyes2
         private static object? _whiteSprite;
         private static bool _whiteSpriteLoaded = false;
         private static string _modsDir = "";
+        private static bool _diagnosticMode = false;
 
         // Center overlays for Unknown and specific affinity result icons
         private const float CenterOverlaySize = 100f;
         private const float ResultIconSize = 64f;
-        private static bool _questionInitDone = false;
         private static readonly object?[] _questionGOs = new object?[MAX_SLOTS];
         private static readonly object?[] _resultIconGOs = new object?[MAX_SLOTS];
         private static readonly object?[] _resultIconImages = new object?[MAX_SLOTS];
         private static readonly object?[] _resultIconSprites = new object?[4];
         private static bool _resultIconSpritesLoaded = false;
 
-        internal static void Init(MelonLogger.Instance log, bool useLuminanceStrategy, string modsDir)
+        internal static void Init(MelonLogger.Instance log, bool useLuminanceStrategy, string modsDir, bool diagnosticMode = false)
         {
             _log = log;
             _modsDir = modsDir;
+            _diagnosticMode = diagnosticMode;
 
             if (useLuminanceStrategy)
             {
                 ActiveStrategy = new LuminancePreservingStrategy();
-                log.Msg("ReticleColorizer: Using LuminancePreserving strategy (fallback).");
+                if (_diagnosticMode)
+                    log.Msg("ReticleColorizer: Using LuminancePreserving strategy (fallback).");
             }
             else
             {
                 ActiveStrategy = new HsvHueShiftStrategy();
-                log.Msg("ReticleColorizer: Using HsvHueShift strategy (primary).");
+                if (_diagnosticMode)
+                    log.Msg("ReticleColorizer: Using HsvHueShift strategy (primary).");
             }
         }
 
@@ -252,7 +255,7 @@ namespace PreyEyes2
                 object? reticleGO = ReflectionCache.GetTargetMark2D(curidx);
                 if (reticleGO == null)
                 {
-                    if (_diagCount < MAX_DIAG) { _diagCount++; _log?.Msg($"PE2: GetTargetMark2D({curidx}) returned null"); }
+                    if (_diagnosticMode && _diagCount < MAX_DIAG) { _diagCount++; _log?.Msg($"PE2: GetTargetMark2D({curidx}) returned null"); }
                     return;
                 }
 
@@ -263,7 +266,7 @@ namespace PreyEyes2
                     images = ResolveChildImages(reticleGO);
                     _cachedImageArrays[curidx] = images;
 
-                    if (_diagCount < MAX_DIAG)
+                    if (_diagnosticMode && _diagCount < MAX_DIAG)
                     {
                         _diagCount++;
                         _log?.Msg($"PE2: curidx={curidx} affinity={affinity} childImages={images?.Length ?? 0}");
@@ -273,7 +276,7 @@ namespace PreyEyes2
                 if (images == null || images.Length == 0) return;
 
                 // One-time: dump sprite/texture info for the reticle
-                if (!_spriteInfoLogged && images[0] != null)
+                if (_diagnosticMode && !_spriteInfoLogged && images[0] != null)
                 {
                     _spriteInfoLogged = true;
                     LogSpriteInfo(images);
@@ -289,7 +292,7 @@ namespace PreyEyes2
                 // Read color from the first Image (they all share the same animator tint)
                 if (!ReflectionCache.ReadColor(images[0]!, out float r, out float g, out float b, out float a))
                 {
-                    if (_diagCount < MAX_DIAG) { _diagCount++; _log?.Msg($"PE2: ReadColor failed for curidx={curidx}"); }
+                    if (_diagnosticMode && _diagCount < MAX_DIAG) { _diagCount++; _log?.Msg($"PE2: ReadColor failed for curidx={curidx}"); }
                     return;
                 }
 
@@ -298,7 +301,7 @@ namespace PreyEyes2
                     out float dr, out float dg, out float db, out float da);
 
                 // ONE-TIME deep diagnostic of the write path
-                if (_diagCount < MAX_DIAG)
+                if (_diagnosticMode && _diagCount < MAX_DIAG)
                 {
                     _diagCount++;
                     bool hasNative = ReflectionCache.N_SetColor != null;
@@ -523,7 +526,8 @@ namespace PreyEyes2
                 if (System.IO.File.Exists(path))
                 {
                     _whiteSprite = AffinityBoard.LoadSpritePublic(path);
-                    _log?.Msg($"PE2: White reticle sprite loaded: {(_whiteSprite != null ? "OK" : "FAIL")}");
+                    if (_diagnosticMode)
+                        _log?.Msg($"PE2: White reticle sprite loaded: {(_whiteSprite != null ? "OK" : "FAIL")}");
                 }
                 else
                 {
@@ -646,7 +650,8 @@ namespace PreyEyes2
                         catch { }
                     }
 
-                    _log?.Msg($"PE2: Question mark (dual layer) created for curidx={curidx}");
+                    if (_diagnosticMode)
+                        _log?.Msg($"PE2: Question mark (dual layer) created for curidx={curidx}");
                 }
             }
 
@@ -681,7 +686,8 @@ namespace PreyEyes2
                         ReflectionCache.SetRect(iconGO, ResultIconSize, ResultIconSize, 0.5f, 0.5f, 0.5f, 0.5f, 0f, 0f);
                     }
 
-                    _log?.Msg($"PE2: Result icon overlay created for curidx={curidx}");
+                    if (_diagnosticMode)
+                        _log?.Msg($"PE2: Result icon overlay created for curidx={curidx}");
                 }
             }
 
@@ -703,20 +709,25 @@ namespace PreyEyes2
             if (_resultIconSpritesLoaded) return;
             _resultIconSpritesLoaded = true;
 
-            string baseDir = System.IO.Path.Combine(System.IO.Path.GetDirectoryName(_modsDir) ?? ".", "ui models", "reticleresults");
+            string packagedDir = System.IO.Path.Combine(_modsDir, "icons", "reticleresults");
+            string legacyDir = System.IO.Path.Combine(System.IO.Path.GetDirectoryName(_modsDir) ?? ".", "ui models", "reticleresults");
             string[] fileNames = { "resisticon.png", "blockicon.png", "reflecticon.png", "absorbicon.png" };
 
             for (int i = 0; i < fileNames.Length; i++)
             {
-                string path = System.IO.Path.Combine(baseDir, fileNames[i]);
+                string path = System.IO.Path.Combine(packagedDir, fileNames[i]);
+                if (!System.IO.File.Exists(path))
+                    path = System.IO.Path.Combine(legacyDir, fileNames[i]);
+
                 if (System.IO.File.Exists(path))
                 {
                     _resultIconSprites[i] = AffinityBoard.LoadSpritePublic(path);
-                    _log?.Msg($"PE2: Reticle result icon {fileNames[i]} loaded: {(_resultIconSprites[i] != null ? "OK" : "FAIL")}");
+                    if (_diagnosticMode)
+                        _log?.Msg($"PE2: Reticle result icon {fileNames[i]} loaded: {(_resultIconSprites[i] != null ? "OK" : "FAIL")}");
                 }
                 else
                 {
-                    _log?.Warning($"PE2: Reticle result icon missing at {path}");
+                    _log?.Warning($"PE2: Reticle result icon missing: expected {System.IO.Path.Combine(packagedDir, fileNames[i])}");
                 }
             }
         }

@@ -2,7 +2,7 @@
 
 Prey Eyes 2 is a MelonLoader mod for **Shin Megami Tensei III: Nocturne HD Remaster**.
 
-It adds an SMTV-style targeting reticle, an enemy affinity board, Cathedral of Shadows affinity display support, and battle buff/debuff indicators.
+It adds an SMTV-style targeting reticle, an enemy affinity board, Cathedral of Shadows affinity display support, and a START-toggle BuffView display.
 
 ## Features
 
@@ -12,9 +12,11 @@ It adds an SMTV-style targeting reticle, an enemy affinity board, Cathedral of S
 - Compact ailment-resistance row for Curse, Nerve, and Mind.
 - Cathedral of Shadows affinity display for fusion previews.
 - Persistent knowledge system learned through attacks, kills, Analyze/Spyglass, recruitment, and fusion.
-- Buff/debuff icon overlay.
+- START-toggle BuffView display using the same working implementation as the Reticles Only build.
 - FPS-unlock friendly board visibility behavior as of `2.5.0`.
-- Self-contained buff/debuff icon assets as of `2.5.1`.
+- Full Prey Eyes 2 uses the stable BuffView path as of `2.5.2`; inline buff icons are reserved for the inactive Prey Eyes 3 fork.
+- Normal play logs stay quiet as of `2.5.3`; deep traces are opt-in.
+- KO/death-freeze no longer suppresses live affinity-board drawing as of `2.5.5`.
 
 ## Requirements
 
@@ -60,10 +62,10 @@ Copy the included icon assets into the same game install:
 Copy-Item ".\Mods\icons" "C:\Program Files (x86)\Steam\steamapps\common\smt3hd\Mods\icons" -Recurse -Force
 ```
 
-The buff/debuff overlay expects the kajakunda icon assets at:
+The icon assets include the affinity board art, `reticle_white.png`, and centered reticle result icons under:
 
 ```text
-Mods\icons\kajakunda\
+Mods\icons\reticleresults\
 ```
 
 Do not run this full build at the same time as the Reticles Only alternative. They use the same MelonLoader mod name and installed DLL path:
@@ -85,6 +87,16 @@ Deleting that file resets learned affinity knowledge.
 ## Notes
 
 The assembly name remains `PreyEyes2` for compatibility with existing save/config/knowledge paths.
+
+Optional diagnostic switches can be enabled by placing empty files in the game's `Mods` folder:
+
+```text
+PreyEyes2_trace
+PreyEyes2_diag
+PreyEyes2_luminance
+```
+
+`PreyEyes2_trace` enables detailed runtime trace logging. `PreyEyes2_diag` enables trace logging plus raw affinity diagnostics. `PreyEyes2_luminance` switches the reticle tinting strategy.
 
 ## Credits
 
